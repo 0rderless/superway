@@ -24,4 +24,9 @@ cd game && python3 -m http.server 8000   # then open http://localhost:8000
 - `tools/render_tree_sprite.py` — renders the tree billboards used in the game
 - `renders/` — final studio renders
 
+## m4/ — the M4 (two-door performance coupe)
+- `m4.blend` — the Blender 5.x scene; `m4.py` builds it (uses `car/studio.py` and `car/wheels.py`)
+- `export_game_m4.py` — exports the game model (`game/m4.json`)
+- `renders/` — final studio renders
+
 See `game/CREDITS.md` for the third-party assets.

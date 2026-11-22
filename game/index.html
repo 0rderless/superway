@@ -638,6 +638,7 @@ const carBody = new THREE.Group(); carRoot.add(carBody);
 const wheels = { front: [], all: [] };
 const WHEEL_R = 0.374, WHEELBASE = 3.05, HALF_W = 1.06, HALF_L = 2.35;
 let carReady = false;
+let carWheelR = WHEEL_R;
 function useCarModel(gltfScene) {
   gltfScene.rotation.y = -Math.PI / 2;                        // model faces -X; the game drives towards -Z
   gltfScene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -849,7 +850,7 @@ function step(dt) {
   car.pitch += ((-a * 0.0045) - car.pitch) * Math.min(1, dt * 6);
   car.roll += ((latA * 0.0042) - car.roll) * Math.min(1, dt * 6);
   for (const w of wheels.all) {
-    w.angle += (w.left ? 1 : -1) * car.v / WHEEL_R * dt;
+    w.angle += (w.left ? 1 : -1) * car.v / carWheelR * dt;
     w.spin.quaternion.copy(w.base).multiply(tmpQ.setFromAxisAngle(AXIS_Y, w.angle));
   }
   for (const w of wheels.front) w.root.rotation.y = car.steer;
@@ -915,7 +916,8 @@ streamChunks(0);
 requestAnimationFrame(frame);
 /* ---------- cars: add new ones here (model = exported glTF JSON, thumb = garage picture) */
 const CARS = [
-  { id: 'hellcat', name: 'Hellcat', blurb: 'Widebody muscle sedan', model: 'car.json', thumb: 'cars/hellcat.jpg' },
+  { id: 'hellcat', name: 'Hellcat', blurb: 'Widebody muscle sedan', model: 'car.json', thumb: 'cars/hellcat.jpg', wheelR: 0.374 },
+  { id: 'm4', name: 'M4', blurb: 'Two-door performance coupe', model: 'm4.json', thumb: 'cars/m4.jpg', wheelR: 0.355 },
 ];
 S.carId = CARS.some(c => c.id === store.get('car', 'hellcat')) ? store.get('car', 'hellcat') : CARS[0].id;
 let activeCarId = null;
@@ -939,7 +941,7 @@ function setCarModel(obj) { carBody.clear(); wheels.all.length = 0; wheels.front
 function loadCar(id, thenDrive) {
   const c = CARS.find(x => x.id === id) || CARS[0];
   $('go').disabled = true; $('go').textContent = `Loading the ${c.name}…`;
-  const done = (obj, msg) => { activeCarId = c.id; setCarModel(obj); ready(msg); if (thenDrive) { car.v = 0; showOverlay(false); } };
+  const done = (obj, msg) => { activeCarId = c.id; carWheelR = c.wheelR || WHEEL_R; setCarModel(obj); ready(msg); if (thenDrive) { car.v = 0; showOverlay(false); } };
   if (carCache.has(c.id)) return done(carCache.get(c.id));
   new GLTFLoader().load(c.model,
     g => { carCache.set(c.id, g.scene); done(g.scene); },

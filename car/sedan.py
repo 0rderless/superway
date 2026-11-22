@@ -500,14 +500,28 @@ box('Diffuser', (0.30, 1.56, 0.17), (RX - 0.06, 0, 0.19), SATIN, bevel=0.05)
 box('DiffuserHump', (0.26, 0.62, 0.09), (RX - 0.04, 0, 0.27), SATIN, bevel=0.04)
 for k, yy in enumerate((-0.30, -0.15, 0.0, 0.15, 0.30)):
     box('DiffFin%d' % k, (0.22, 0.012, 0.10), (RX - 0.02, yy, 0.16), GRILLE)
+TIP = principled('TipSteel', (0.78, 0.78, 0.80), rough=0.18, metal=1.0)
+DIFF = bpy.data.objects['Diffuser']
 for s_ in (-1, 1):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=0.075, depth=0.26, location=(RX + 0.0, s_ * 0.56, 0.24), rotation=(0, math.pi / 2, 0))
+    zc, R_, xe, yy = 0.19, 0.072, RX + 0.17, 0.56      # big round tip: centre height, radius, end x, lateral position
+    # round opening through the diffuser so the whole tip shows
+    bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=R_ + 0.008, depth=0.6, location=(RX, s_ * yy, zc), rotation=(0, math.pi / 2, 0))
+    hc = bpy.context.active_object; hc.name = 'TipHole%+d' % s_
+    for cc in hc.users_collection: cc.objects.unlink(hc)
+    cutters.objects.link(hc); hc.hide_render = True
+    bo = DIFF.modifiers.new('TipHole', 'BOOLEAN'); bo.operation = 'DIFFERENCE'; bo.object = hc; bo.solver = 'EXACT'
+    # polished steel tube with a rolled lip, dark inside
+    bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=R_, depth=0.30, end_fill_type='NOTHING', location=(xe - 0.15, s_ * yy, zc), rotation=(0, math.pi / 2, 0))
     ex = bpy.context.active_object; ex.name = 'Exhaust%+d' % s_
     for cc in ex.users_collection: cc.objects.unlink(ex)
-    car.objects.link(ex); ex.data.materials.append(principled('TipMetal', (0.6, 0.6, 0.62), rough=0.3, metal=1.0))
-    ex.modifiers.new('Tube', 'SOLIDIFY').thickness = 0.01
+    car.objects.link(ex); ex.data.materials.append(TIP)
+    ex.modifiers.new('Tube', 'SOLIDIFY').thickness = 0.007
     ex.data.polygons.foreach_set('use_smooth', [True] * len(ex.data.polygons))
-    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=0.063, depth=0.01, location=(RX + 0.06, s_ * 0.56, 0.24), rotation=(0, math.pi / 2, 0))
+    bpy.ops.mesh.primitive_torus_add(major_radius=R_, minor_radius=0.008, major_segments=64, minor_segments=10, location=(xe, s_ * yy, zc), rotation=(0, math.pi / 2, 0))
+    lip = bpy.context.active_object; lip.name = 'TipLip%+d' % s_
+    for cc in lip.users_collection: cc.objects.unlink(lip)
+    car.objects.link(lip); lip.data.materials.append(TIP); lip.data.polygons.foreach_set('use_smooth', [True] * len(lip.data.polygons))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=R_ - 0.004, depth=0.01, location=(xe - 0.06, s_ * yy, zc), rotation=(0, math.pi / 2, 0))
     ei = bpy.context.active_object; ei.name = 'ExhaustInner%+d' % s_
     for cc in ei.users_collection: cc.objects.unlink(ei)
     car.objects.link(ei); ei.data.materials.append(GRILLE)
@@ -549,6 +563,7 @@ CAMS = {
     'front':   ((-9.5, 0.0, 0.62), (0, 0, 0.62), 85),
     'rear':    ((9.5, 0.0, 1.05), (0, 0, 0.62), 85),
     'corner':  ((-4.2, -2.6, 1.05), (-2.15, -0.75, 0.72), 50),
+    'tips':    ((RX + 1.7, -1.1, 0.40), (RX, -0.5, 0.22), 50),
     'top34':   ((-4.6, -4.8, 4.3), (0.2, 0, 0.5), 45),
 }
 
