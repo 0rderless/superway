@@ -8,6 +8,8 @@ new cars are added to the `CARS` list in `game/index.html` with a model (`.json`
 - **Keyboard / mouse:** `W A S D` drive, arrow keys look around, `Q`/`E` top speed −/+ 5, `Space` brake,
   `C` camera, `R` reset, `U` mph/km/h, `G` graphics, mouse clicks the on-screen buttons.
 - **Touch (iPhone / iPad):** ◀ ▶ steer, GAS / BRAKE pedals (hold BRAKE when stopped to reverse), drag to look around.
+- **Traffic:** `T` or the Traffic button cycles off / normal / busy. Cars, SUVs, vans, box vans, coaches and lorries
+  drive in the lanes both ways, follow the vehicle ahead, overtake and move back left; every one spawns in a random colour.
 - **Top speed:** set it any time with − / + or by typing in the box top-right; it is remembered on that device.
 - The HUD and camera adapt to the screen shape (phone landscape, 16:9, iPad 4:3, portrait).
 
@@ -28,5 +30,11 @@ cd game && python3 -m http.server 8000   # then open http://localhost:8000
 - `m4.blend` — the Blender 5.x scene; `m4.py` builds it (uses `car/studio.py` and `car/wheels.py`)
 - `export_game_m4.py` — exports the game model (`game/m4.json`)
 - `renders/` — final studio renders
+
+## traffic/ — AI traffic vehicles
+`traffic.py` builds all eight traffic vehicles from one script with a short card of numbers per type
+(hatchback, saloon, estate, SUV, van, box van, coach, articulated lorry).
+- `python3 traffic.py lineup` renders `renders/lineup.png`
+- `python3 traffic.py export ../game/traffic` writes the light game models
 
 See `game/CREDITS.md` for the third-party assets.
