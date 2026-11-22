@@ -14,7 +14,7 @@ Run it locally by serving the folder (the car model and textures are loaded by U
 ```
 cd game && python3 -m http.server 8000   # then open http://localhost:8000
 ```
-GitHub Pages works too: point Pages at this branch and open `/game/`.
+**Play online:** https://0rderless.github.io/superway/ (GitHub Pages, from the `main` branch; the root page opens `game/`).
 
 ## car/ — the muscle sedan
 - `muscle_sedan.blend` — the Blender 5.x scene (car, studio, six cameras)
