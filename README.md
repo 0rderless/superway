@@ -2,7 +2,8 @@
 
 ## game/ — M99 Free Roam
 An endless, empty UK-style dual carriageway (three lanes and a hard shoulder each way) with overbridges,
-gantry signs, buildings and trees, and just the muscle sedan. Plain HTML + three.js, no build step.
+gantry signs, buildings and trees, and just your car. Pick your car in the Garage (`Esc` or the Garage button);
+new cars are added to the `CARS` list in `game/index.html` with a model (`.json`) and a picture in `game/cars/`. Plain HTML + three.js, no build step.
 
 - **Keyboard / mouse:** `W A S D` drive, arrow keys look around, `Q`/`E` top speed −/+ 5, `Space` brake,
   `C` camera, `R` reset, `U` mph/km/h, `G` graphics, mouse clicks the on-screen buttons.
@@ -16,7 +17,7 @@ cd game && python3 -m http.server 8000   # then open http://localhost:8000
 ```
 **Play online:** https://0rderless.github.io/superway/ (GitHub Pages, from the `main` branch; the root page opens `game/`).
 
-## car/ — the muscle sedan
+## car/ — the Hellcat (widebody muscle sedan)
 - `muscle_sedan.blend` — the Blender 5.x scene (car, studio, six cameras)
 - `sedan.py` (+ `studio.py`, `wheels.py`) — builds the car from scratch: `python3 sedan.py all --samples 64`
 - `export_game_glb.py`, `glb_to_json.py` — export the lightweight game model (`game/car.json`)
