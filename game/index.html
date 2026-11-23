@@ -1060,12 +1060,13 @@ function placeTraffic() {
     t.mesh.rotation.y = (t.dir < 0 ? 0 : Math.PI) + (t.steer || 0) * (t.dir < 0 ? 1 : -1) * -1;
   }
 }
-window.__m99 = { traffic, trafficModels, car };            // handy for debugging in the browser console
+window.__m99 = { traffic, trafficModels, car, camera };            // handy for debugging in the browser console
 $('btnTraffic').addEventListener('click', cycleTraffic);
 $('trafficLabel').textContent = S.traffic === 1 ? 'Traffic' : `Traffic ${TRAFFIC_LEVELS[S.traffic].name.toLowerCase()}`;
 
 /* ============================================================ camera */
 const camPos = new THREE.Vector3(SPAWN_X, 3, 8), camLook = new THREE.Vector3(SPAWN_X, 1, 0);
+let camYaw = 0;
 const CAM_DEF = [
   { back: 5.1, up: 1.72, lookUp: 0.95, ahead: 4, lag: 8 },
   { back: 7.6, up: 2.5, lookUp: 1.05, ahead: 6, lag: 6 },
@@ -1087,15 +1088,18 @@ function updateCamera(dt) {
     camPos.set(car.pos.x + cf * 0.6, c.up, car.pos.z + cz * 0.6);
     camLook.set(camPos.x + fx * c.ahead, c.lookUp + Math.sin(look.pitch) * 8, camPos.z + fz * c.ahead);
   } else {
-    const want = tmpP.set(car.pos.x - fx * back * Math.cos(look.pitch), up + Math.sin(look.pitch) * back, car.pos.z - fz * back * Math.cos(look.pitch));
-    camPos.lerp(want, 1 - Math.exp(-c.lag * dt));
+    // locked to the car: same distance at every speed; only the swing round corners is smoothed
+    let dy = yaw - camYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    camYaw += dy * (1 - Math.exp(-c.lag * dt));
+    const bx = Math.sin(camYaw), bz = Math.cos(camYaw);
+    camPos.set(car.pos.x + bx * back * Math.cos(look.pitch), up + Math.sin(look.pitch) * back, car.pos.z + bz * back * Math.cos(look.pitch));
     const lookAhead = (Math.abs(look.yaw) > 0.05 || Math.abs(look.pitch) > 0.05) ? 0 : c.ahead * 0.25;
     camLook.set(car.pos.x + fx * lookAhead, c.lookUp, car.pos.z + fz * lookAhead);
   }
   if (shake > 0) { camPos.x += (Math.random() - 0.5) * shake; camPos.y += (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 1.2); }
   camera.position.copy(camPos); camera.lookAt(camLook);
   // keep the horizontal field of view steady across screen shapes (4:3 iPad gets a taller view, not a narrower one)
-  const hf = (AR.hfov + Math.min(14, Math.abs(car.v) * 0.15)) * Math.PI / 180;
+  const hf = AR.hfov * Math.PI / 180;                       // fixed: no speed zoom, the car stays the same size on screen
   const vf = 2 * Math.atan(Math.tan(hf / 2) / camera.aspect) * 180 / Math.PI;
   const fovT = Math.max(48, Math.min(88, vf));
   camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
