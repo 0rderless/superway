@@ -10,6 +10,10 @@ new cars are added to the `CARS` list in `game/index.html` with a model (`.json`
 - **Touch (iPhone / iPad):** ◀ ▶ steer, GAS / BRAKE pedals (hold BRAKE when stopped to reverse), drag to look around.
 - **Traffic:** `T` or the Traffic button cycles off / normal / busy. Cars, SUVs, vans, box vans, coaches and lorries
   drive in the lanes both ways, follow the vehicle ahead, overtake and move back left; every one spawns in a random colour.
+- **Rocket boost:** hold `Shift` or the rocket button. It pushes past the top-speed limiter (up to 1.5x); the ring round
+  the button is fuel (4 s), which refills after a second off it.
+- **HUD editor:** the HUD button lets you drag every button, the speedo, the sign and the touch pedals anywhere and
+  resize them. Layouts are saved on the device, separately for phone, iPad and portrait screens.
 - **Top speed:** set it any time with − / + or by typing in the box top-right; it is remembered on that device.
 - The HUD and camera adapt to the screen shape (phone landscape, 16:9, iPad 4:3, portrait).
 

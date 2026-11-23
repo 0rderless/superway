@@ -194,6 +194,35 @@ def assign_glass(o, card):
                 t = (x - a[0]) / (b[0] - a[0] + 1e-9)
                 return a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t
         return st[-1][3], st[-1][4]
+    def interp(x, i):
+        if x <= st[0][0]: return st[0][i]
+        for a, b in zip(st, st[1:]):
+            if a[0] <= x <= b[0]:
+                t = (x - a[0]) / (b[0] - a[0] + 1e-9)
+                return a[i] + (b[i] - a[i]) * t
+        return st[-1][i]
+    # slice the body along every window edge first, so each window is bounded by real edges
+    # (picking whole faces on the plain subdivided mesh gave saw-tooth edges and blotches)
+    bm = bmesh.new(); bm.from_mesh(me)
+    def cut(co, no):
+        geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+        bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-5, plane_co=co, plane_no=no)
+    for a, b in card['side']:
+        cut((a, 0, 0), (1, 0, 0)); cut((b, 0, 0), (1, 0, 0))
+        za, zb_ = belt_roof(a)[0] + 0.035, belt_roof(b)[0] + 0.035
+        cut((a, 0, za), Vector((-(zb_ - za) / (b - a), 0, 1)).normalized())
+    s0, s1 = card['screen']
+    ys = interp(s1, 1) - interp(s1, 5) - 0.10
+    cut((0, ys, 0), (0, 1, 0)); cut((0, -ys, 0), (0, 1, 0))
+    cut((s0, 0, 0), (1, 0, 0))
+    yr = zr = None
+    if card['rear']:
+        r0, r1 = card['rear']
+        yr = min(interp(x, 1) - interp(x, 5) for x in (r0, (r0 + r1) / 2, r1)) - 0.12
+        zr = belt_roof(r1)[0] + 0.07
+        cut((r0, 0, 0), (1, 0, 0)); cut((0, 0, zr), (0, 0, 1))
+        cut((0, yr, 0), (0, 1, 0)); cut((0, -yr, 0), (0, 1, 0))
+    bm.to_mesh(me); bm.free()
     for f in me.polygons:
         c, nrm = f.center, f.normal
         zbelt, zroof = belt_roof(c.x)
@@ -202,10 +231,47 @@ def assign_glass(o, card):
         if abs(nrm.y) > 0.45 and c.z < zroof - 0.06:
             if any(a <= c.x <= b for a, b in card['side']):
                 f.material_index = gi
-        elif nrm.x < -0.18 and card['screen'][0] <= c.x <= card['screen'][1]:          # the windscreen is the sloping roofline itself
+        elif nrm.x < -0.18 and s0 <= c.x <= s1 and abs(c.y) < ys:            # the windscreen is the sloping roofline itself
             f.material_index = gi
-        elif card['rear'] and nrm.x > 0.18 and card['rear'][0] <= c.x <= card['rear'][1] and c.z > zbelt + 0.06:
+        elif yr and nrm.x > 0.12 and c.x >= card['rear'][0] and c.z > zr and abs(c.y) < yr and c.z < zroof - 0.03:
             f.material_index = gi
+
+
+def smooth_hard_edges(o, angle=38):
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    for f in bm.faces: f.smooth = True
+    hard = [e for e in bm.edges if len(e.link_faces) == 2 and e.calc_face_angle(0) > math.radians(angle)]
+    bmesh.ops.split_edges(bm, edges=hard)
+    bm.to_mesh(o.data); bm.free()
+
+
+def surface_x(objs, y, z, front):
+    """x of the outermost real surface at (y, z), seen from the front (-x) or the back (+x)"""
+    dg = bpy.context.evaluated_depsgraph_get()
+    org = Vector((-60.0 if front else 60.0, y, z)); d = Vector((1, 0, 0)) if front else Vector((-1, 0, 0))
+    best = None
+    for o in objs:
+        inv = o.matrix_world.inverted()
+        ok, loc, _n, _i = o.ray_cast(inv @ org, (inv.to_3x3() @ d).normalized(), depsgraph=dg)
+        if ok:
+            x = (o.matrix_world @ loc).x
+            best = x if best is None else (min(best, x) if front else max(best, x))
+    return best
+
+
+def snapped(name, coll, objs, size, y, z, front, mat, bevel):
+    """a lamp / plate / grille box sitting on the actual (subdivided) surface: its face 1.2 cm proud of the
+    outermost point under it and deep enough to reach back into the body, so it never hides or flickers"""
+    hy, hz = size[1] / 2 * 0.9, size[2] / 2 * 0.9
+    xs = [surface_x(objs, y + dy, z + dz, front) for dy, dz in ((0, 0), (hy, hz), (-hy, hz), (hy, -hz), (-hy, -hz))]
+    xs = [x for x in xs if x is not None]
+    if not xs:
+        return None
+    outer = min(xs) if front else max(xs); inner = max(xs) if front else min(xs)
+    depth = max(size[0], abs(inner - outer) + 0.04)
+    face = outer - 0.012 if front else outer + 0.012
+    cx = face + depth / 2 if front else face - depth / 2
+    return rbox(name, coll, (depth, size[1], size[2]), (cx, y, z), mat, bevel=bevel)
 
 
 def simple_wheel(name, coll, x, y, r, w, rim_col, left):
@@ -239,12 +305,14 @@ def simple_wheel(name, coll, x, y, r, w, rim_col, left):
 
 
 def lights_and_plates(coll, x_front, x_rear, w, z_head, z_tail, z_plate_f, z_plate_r, light_w=0.30):
+    """lamps and plates snapped onto whatever bodywork is already in the collection"""
+    objs = [o for o in coll.objects if o.type == 'MESH']
     for s in (-1, 1):
-        rbox('Head%+d' % s, coll, (0.05, light_w, 0.08), (x_front + 0.03, s * (w - 0.10 - light_w / 2), z_head), HEAD, bevel=0.015)
-        rbox('Tail%+d' % s, coll, (0.05, light_w * 0.9, 0.09), (x_rear - 0.03, s * (w - 0.10 - light_w * 0.45), z_tail), TAIL, bevel=0.015)
-        rbox('IndF%+d' % s, coll, (0.04, 0.06, 0.04), (x_front + 0.05, s * (w - 0.05), z_head - 0.07), INDICATOR, bevel=0.008)
-    rbox('PlateF', coll, (0.02, 0.52, 0.11), (x_front - 0.005, 0, z_plate_f), PLATE_F, bevel=0.004)
-    rbox('PlateR', coll, (0.02, 0.52, 0.11), (x_rear + 0.005, 0, z_plate_r), PLATE_R, bevel=0.004)
+        snapped('Head%+d' % s, coll, objs, (0.05, light_w, 0.08), s * (w - 0.12 - light_w / 2), z_head, True, HEAD, 0.015)
+        snapped('Tail%+d' % s, coll, objs, (0.05, light_w * 0.9, 0.09), s * (w - 0.12 - light_w * 0.45), z_tail, False, TAIL, 0.015)
+        snapped('IndF%+d' % s, coll, objs, (0.04, 0.06, 0.04), s * (w - 0.10), z_head - 0.07, True, INDICATOR, 0.008)
+    snapped('PlateF', coll, objs, (0.02, 0.52, 0.11), 0, z_plate_f, True, PLATE_F, 0.004)
+    snapped('PlateR', coll, objs, (0.02, 0.52, 0.11), 0, z_plate_r, False, PLATE_R, 0.004)
 
 
 # ===================================================================== builders
@@ -273,8 +341,9 @@ def build_lofted(key, coll, colour=None):
         xr_ = bx1; zt_r = 0.85
     else:
         xr_ = xr; zt_r = zbelt_r - 0.10
-    lights_and_plates(coll, xf + 0.04, xr_ - 0.03, w0, zbelt_f - 0.10, zt_r, zb_f + 0.18, zb_r + 0.30 if 'box' not in c else 0.55)
-    rbox('Grille_' + key, coll, (0.05, w0 * 0.9, 0.12), (xf + 0.05, 0, zb_f + 0.26), BLACK, bevel=0.02)
+    smooth_hard_edges(body)
+    snapped('Grille_' + key, coll, [body], (0.05, w0 * 0.62, 0.11), 0, zb_f + 0.27, True, BLACK, 0.02)
+    lights_and_plates(coll, xf + 0.04, xr_ - 0.03, w0, zbelt_f - 0.10, zt_r, zb_f + 0.13, zb_r + 0.30 if 'box' not in c else 0.50)
     for s in (-1, 1):   # mirrors
         xm = c['screen'][1] + 0.08
         rbox('Mirror%+d' % s, coll, (0.12, 0.10, 0.09), (xm, s * (w0 + 0.07), (c['stations'][4][3]) + 0.12), P, bevel=0.025)
@@ -315,16 +384,16 @@ def build_lorry(coll, colour=None):
 def build_coach(coll, colour=None):
     c = HEAVY['coach']; P = paint('Paint_coach', colour or c['paint']); WHITE = paint('CoachWhite', (0.86, 0.86, 0.87))
     rbox('Body', coll, (12.2, 2.55, 3.15), (0, 0, 0.42 + 1.575), WHITE, bevel=0.18)
-    rbox('Livery', coll, (12.21, 2.56, 0.95), (0, 0, 0.95), P, bevel=0.12)
+    rbox('Livery', coll, (12.24, 2.59, 0.95), (0, 0, 0.95), P, bevel=0.12)
     rbox('Screen', coll, (0.05, 2.35, 1.75), (-6.09, 0, 2.38), GLASS, bevel=0.06, rot=(0, math.radians(-6), 0))
     rbox('RearWin', coll, (0.04, 2.0, 0.9), (6.10, 0, 2.75), GLASS, bevel=0.04)
     for s in (-1, 1):
         rbox('WinBand%+d' % s, coll, (10.7, 0.03, 1.35), (0.40, s * 1.276, 2.55), GLASS, bevel=0.04)
         for k in range(8):                             # window pillars
-            rbox('Pillar%+d_%d' % (s, k), coll, (0.09, 0.035, 1.36), (-4.40 + k * 1.40, s * 1.278, 2.55), BLACK, bevel=0)
+            rbox('Pillar%+d_%d' % (s, k), coll, (0.09, 0.035, 1.36), (-4.40 + k * 1.40, s * 1.305, 2.55), BLACK, bevel=0)
         rbox('Mirror%+d' % s, coll, (0.10, 0.10, 0.40), (-6.30, s * 1.30, 2.70), BLACK, bevel=0.02)
-        rbox('Bays%+d' % s, coll, (6.0, 0.02, 0.01), (0.2, s * 1.278, 1.45), BLACK, bevel=0)
-    rbox('Door', coll, (1.05, 0.035, 2.3), (-5.25, 1.278, 1.75), GLASS, bevel=0.03)
+        rbox('Bays%+d' % s, coll, (6.0, 0.02, 0.012), (0.2, s * 1.31, 1.45), BLACK, bevel=0)
+    rbox('Door', coll, (1.05, 0.035, 2.3), (-5.25, 1.305, 1.75), GLASS, bevel=0.03)
     rbox('Bumper', coll, (0.20, 2.5, 0.35), (-6.12, 0, 0.55), BLACK, bevel=0.05)
     rbox('BumperR', coll, (0.20, 2.5, 0.35), (6.12, 0, 0.55), BLACK, bevel=0.05)
     lights_and_plates(coll, -6.14, 6.14, 1.275, 0.95, 1.05, 0.62, 0.75, light_w=0.36)
